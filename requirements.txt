@@ -1,0 +1,9 @@
+streamlit
+pandas
+openpyxl
+scikit-learn==1.6.1
+transformers
+torch
+torchvision
+google-generativeai
+plotly
