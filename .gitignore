@@ -26,6 +26,7 @@ venv.bak/
 *.pth
 *.h5
 *.onnx
+*.safetensors
 indobert_sentiment_model_full/
 
 # Jupyter Notebook
