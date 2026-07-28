@@ -2,63 +2,13 @@ import streamlit as st
 import pandas as pd
 import io
 import plotly.express as px
+import plotly.graph_objects as go
 import importlib
 import models
 importlib.reload(models)
 from models import load_naive_bayes, predict_naive_bayes, load_indobert, predict_indobert, predict_gemini, predict_gemini_single_with_reasoning
 
 st.set_page_config(page_title="JKN Sentiment AI", page_icon="🔮", layout="wide")
-
-# Custom CSS for Premium UI
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
-    
-    html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
-    }
-    
-    .stApp {
-        background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
-        color: #f8fafc;
-    }
-    
-    h1, h2, h3 {
-        color: #ffffff !important;
-        font-weight: 700;
-        letter-spacing: -0.5px;
-    }
-    
-    .stButton>button {
-        background: linear-gradient(90deg, #4f46e5 0%, #7c3aed 100%);
-        color: white;
-        border: none;
-        border-radius: 8px;
-        padding: 0.5rem 1rem;
-        font-weight: 600;
-        transition: all 0.3s ease;
-        width: 100%;
-    }
-    .stButton>button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(124, 58, 237, 0.4);
-        color: white;
-    }
-    
-    .stDownloadButton>button {
-        background: linear-gradient(90deg, #10b981 0%, #059669 100%);
-    }
-    .stDownloadButton>button:hover {
-        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
-    }
-    
-    /* Metrics */
-    div[data-testid="stMetricValue"] {
-        color: #818cf8;
-        font-weight: 700;
-    }
-</style>
-""", unsafe_allow_html=True)
 
 @st.cache_resource
 def get_nb_model():
@@ -76,8 +26,8 @@ def convert_df(df):
     return processed_data
 
 def main():
-    st.markdown("<h1 style='text-align: center; margin-bottom: 2rem;'>🔮 JKN Mobile Sentiment Analyzer</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #cbd5e1; margin-bottom: 3rem;'>Analyze user feedback efficiently with state-of-the-art AI models.</p>", unsafe_allow_html=True)
+    st.title("🔮 JKN Mobile Sentiment Analyzer")
+    st.markdown("Analyze user feedback efficiently with state-of-the-art AI models.")
     
     tab1, tab2 = st.tabs(["📁 Batch Excel Analysis", "💬 Single Review Analysis"])
     
@@ -109,13 +59,14 @@ def main():
                     with st.spinner(f"Analyzing sentiments using {model_choice}..."):
                         if model_choice == "Naive Bayes":
                             nb_model, vectorizer = get_nb_model()
-                            preds = predict_naive_bayes(texts, nb_model, vectorizer)
+                            preds, confs = predict_naive_bayes(texts, nb_model, vectorizer)
                             
                         elif model_choice == "IndoBERT":
                             bert_model, tokenizer = get_indobert_model()
-                            preds = predict_indobert(texts, bert_model, tokenizer)
+                            preds, confs = predict_indobert(texts, bert_model, tokenizer)
                             
                         df['sentiment_result'] = preds
+                        df['confidence'] = confs
                     
                     st.success("Analysis Complete!")
                     st.dataframe(df.head(10), width="stretch")
@@ -163,6 +114,25 @@ def main():
                     fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color='white')
                     c2.plotly_chart(fig_pie, width="stretch")
                     
+                    # Confidence Distribution
+                    if 'confidence' in df.columns:
+                        st.markdown("### 🎯 Confidence Distribution")
+                        fig_hist = px.histogram(
+                            df, 
+                            x="confidence", 
+                            color="sentiment_result",
+                            nbins=20,
+                            title="Confidence Score Distribution",
+                            color_discrete_map={
+                                'Positif': '#10b981',
+                                'Netral': '#64748b',
+                                'Negatif': '#ef4444',
+                                'Error': '#f59e0b'
+                            }
+                        )
+                        fig_hist.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='white')
+                        st.plotly_chart(fig_hist, width="stretch")
+                    
                     # Download
                     st.markdown("### 💾 Export")
                     excel_data = convert_df(df)
@@ -200,33 +170,50 @@ def main():
                     st.warning("Please enter your Gemini API Key.")
                 else:
                     with st.spinner(f"Analyzing with {single_model_choice}..."):
+                        res_confidence = None
                         if single_model_choice == "Naive Bayes":
                             nb_model, vectorizer = get_nb_model()
-                            preds = predict_naive_bayes([single_text], nb_model, vectorizer)
+                            preds, confs = predict_naive_bayes([single_text], nb_model, vectorizer)
                             res_sentiment = preds[0]
+                            res_confidence = confs[0]
                             res_reasoning = "Model Naive Bayes mengklasifikasikan sentimen ini berdasarkan probabilitas kata-kata (berbobot TF-IDF) yang muncul dalam ulasan."
                         elif single_model_choice == "IndoBERT":
                             bert_model, tokenizer = get_indobert_model()
-                            preds = predict_indobert([single_text], bert_model, tokenizer)
+                            preds, confs = predict_indobert([single_text], bert_model, tokenizer)
                             res_sentiment = preds[0]
+                            res_confidence = confs[0]
                             res_reasoning = "Model IndoBERT mengklasifikasikan sentimen ini berdasarkan representasi kontekstual mendalam dari arsitektur transformer pre-trained pada bahasa Indonesia."
                         elif single_model_choice == "Gemini 2.5 Flash":
                             res_sentiment, res_reasoning = predict_gemini_single_with_reasoning(single_text, single_api_key)
                             
                         # Display result badge
-                        color_map = {
-                            "Positif": "#10b981",
-                            "Netral": "#64748b",
-                            "Negatif": "#ef4444",
-                            "Error": "#f59e0b"
-                        }
-                        badge_color = color_map.get(res_sentiment, "#64748b")
-                        
-                        st.markdown(f"""
-                        <div style="background: rgba(255,255,255,0.05); padding: 1.5rem; border-radius: 10px; border-left: 5px solid {badge_color}; margin-bottom: 1rem;">
-                            <h2 style="margin: 0; color: {badge_color} !important;">{res_sentiment}</h2>
-                        </div>
-                        """, unsafe_allow_html=True)
+                        if res_sentiment == "Positif":
+                            st.success(f"**{res_sentiment}**")
+                        elif res_sentiment == "Negatif":
+                            st.error(f"**{res_sentiment}**")
+                        elif res_sentiment == "Error":
+                            st.warning(f"**{res_sentiment}**")
+                        else:
+                            st.info(f"**{res_sentiment}**")
+                            
+                        if res_confidence is not None:
+                            fig_gauge = go.Figure(go.Indicator(
+                                mode = "gauge+number",
+                                value = res_confidence,
+                                domain = {'x': [0, 1], 'y': [0, 1]},
+                                title = {'text': "Confidence Score (%)"},
+                                gauge = {
+                                    'axis': {'range': [0, 100]},
+                                    'bar': {'color': "#3b82f6"},
+                                    'steps': [
+                                        {'range': [0, 50], 'color': "rgba(239, 68, 68, 0.2)"},
+                                        {'range': [50, 80], 'color': "rgba(245, 158, 11, 0.2)"},
+                                        {'range': [80, 100], 'color': "rgba(16, 185, 129, 0.2)"}
+                                    ]
+                                }
+                            ))
+                            fig_gauge.update_layout(height=250, margin=dict(l=10, r=10, t=40, b=10), paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+                            st.plotly_chart(fig_gauge, use_container_width=True)
                         
                         st.markdown("#### 💡 Reasoning / Alasan")
                         st.info(res_reasoning)
