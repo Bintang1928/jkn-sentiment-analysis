@@ -14,7 +14,9 @@ def load_naive_bayes(model_path="naive_bayes_model.pkl", vectorizer_path="tfidf_
 def predict_naive_bayes(texts, model, vectorizer):
     X = vectorizer.transform(texts)
     preds = model.predict(X)
-    return list(preds)
+    probs = model.predict_proba(X)
+    confidences = [round(max(prob) * 100, 2) for prob in probs]
+    return list(preds), confidences
 
 def load_indobert(model_dir="indobert_sentiment_model_full"):
     tokenizer = AutoTokenizer.from_pretrained(f"{model_dir}/tokenizer")
@@ -28,6 +30,7 @@ def predict_indobert(texts, model, tokenizer):
     model.eval()
     
     results = []
+    confidences = []
     batch_size = 16
     for i in range(0, len(texts), batch_size):
         batch_texts = texts[i:i+batch_size]
@@ -36,10 +39,13 @@ def predict_indobert(texts, model, tokenizer):
             outputs = model(**inputs)
         
         logits = outputs.logits
-        preds = torch.argmax(logits, dim=1).cpu().numpy()
-        results.extend([labels_map[p] for p in preds])
+        probs = torch.nn.functional.softmax(logits, dim=1)
+        max_probs, preds = torch.max(probs, dim=1)
         
-    return results
+        results.extend([labels_map[p.item()] for p in preds])
+        confidences.extend([round(p.item() * 100, 2) for p in max_probs])
+        
+    return results, confidences
 
 def get_candidate_gemini_models(api_key):
     genai.configure(api_key=api_key)
