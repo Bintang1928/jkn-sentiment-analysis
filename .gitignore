@@ -1,0 +1,32 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+.venv/
+.env/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment Variables
+.env
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Large files and models
+*.pt
+*.pth
+*.h5
+*.onnx
+indobert_sentiment_model_full/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
