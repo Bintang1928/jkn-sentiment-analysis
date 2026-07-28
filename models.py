@@ -16,7 +16,9 @@ def predict_naive_bayes(texts, model, vectorizer):
     preds = model.predict(X)
     probs = model.predict_proba(X)
     confidences = [round(max(prob) * 100, 2) for prob in probs]
-    return list(preds), confidences
+    classes = model.classes_
+    all_probs = [{classes[i]: round(prob[i] * 100, 2) for i in range(len(classes))} for prob in probs]
+    return list(preds), confidences, all_probs
 
 def load_indobert(model_dir="indobert_sentiment_model_full"):
     tokenizer = AutoTokenizer.from_pretrained(f"{model_dir}/tokenizer")
@@ -31,6 +33,7 @@ def predict_indobert(texts, model, tokenizer):
     
     results = []
     confidences = []
+    all_probs = []
     batch_size = 16
     for i in range(0, len(texts), batch_size):
         batch_texts = texts[i:i+batch_size]
@@ -44,8 +47,10 @@ def predict_indobert(texts, model, tokenizer):
         
         results.extend([labels_map[p.item()] for p in preds])
         confidences.extend([round(p.item() * 100, 2) for p in max_probs])
+        for p_array in probs:
+            all_probs.append({labels_map[idx]: round(p_array[idx].item() * 100, 2) for idx in range(len(labels_map))})
         
-    return results, confidences
+    return results, confidences, all_probs
 
 def get_candidate_gemini_models(api_key):
     genai.configure(api_key=api_key)

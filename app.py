@@ -42,16 +42,14 @@ def main():
     tab1, tab2 = st.tabs(["📁 Batch Excel Analysis", "💬 Single Review Analysis"])
     
     with tab1:
-        if True:
+        with st.container(border=True):
             st.markdown("### ⚙️ Configuration")
             uploaded_file = st.file_uploader("Upload Excel File (must contain 'id' & 'comment')", type=['xlsx'])
             
             model_choice = st.selectbox("Select Model", ["Naive Bayes", "IndoBERT"])
             run_button = st.button("🚀 Run Analysis")
-            
-            st.markdown("---")
 
-        if True:
+        with st.container(border=True):
             st.markdown("### 📊 Results Preview")
             
             if uploaded_file is not None:
@@ -66,15 +64,17 @@ def main():
                 if run_button:
                     texts = df['comment'].astype(str).tolist()
                     
-                    with st.spinner(f"Analyzing sentiments using {model_choice}..."):
+                    with st.status(f"Analyzing sentiments using {model_choice}...", expanded=True) as status:
                         start_time = time.time()
                         if model_choice == "Naive Bayes":
                             nb_model, vectorizer = get_nb_model()
-                            preds, confs = predict_naive_bayes(texts, nb_model, vectorizer)
+                            st.write("Extracting features and predicting...")
+                            preds, confs, _ = predict_naive_bayes(texts, nb_model, vectorizer)
                             
                         elif model_choice == "IndoBERT":
                             bert_model, tokenizer = get_indobert_model()
-                            preds, confs = predict_indobert(texts, bert_model, tokenizer)
+                            st.write("Running Transformer inference...")
+                            preds, confs, _ = predict_indobert(texts, bert_model, tokenizer)
                             
                         df['sentiment_result'] = preds
                         df['confidence'] = confs
@@ -82,15 +82,32 @@ def main():
                         inference_time = end_time - start_time
                         throughput = len(texts) / inference_time if inference_time > 0 else 0
                         avg_confidence = sum(confs)/len(confs) if confs else 0
+                        status.update(label="Analysis Complete!", state="complete", expanded=False)
                     
-                    st.success(f"Analysis Complete in {inference_time:.2f} seconds!")
+                    st.toast(f"Analysis Complete in {inference_time:.2f} seconds!", icon="✅")
                     
                     st.markdown("### ⏱️ Performance Metrics")
-                    st.markdown(f"- **Total Reviews:** {len(texts)} rows")
-                    st.markdown(f"- **Average Confidence:** {avg_confidence:.2f}%")
-                    st.markdown(f"- **Throughput:** {throughput:.1f} rows/sec")
+                    col_m1, col_m2, col_m3 = st.columns(3)
+                    col_m1.metric("Total Reviews", f"{len(texts)}")
+                    col_m2.metric("Avg Confidence", f"{avg_confidence:.2f}%")
+                    col_m3.metric("Throughput", f"{throughput:.1f} rows/s")
                     st.markdown("---")
-                    st.dataframe(df.head(10), width="stretch")
+                    
+                    st.dataframe(
+                        df.head(10), 
+                        width="stretch",
+                        column_config={
+                            "confidence": st.column_config.ProgressColumn(
+                                "Confidence",
+                                format="%.2f%%",
+                                min_value=0,
+                                max_value=100,
+                            ),
+                            "sentiment_result": st.column_config.TextColumn(
+                                "Sentiment"
+                            )
+                        }
+                    )
                     
                     # Visualizations
                     st.markdown("### 📈 Data Distribution")
@@ -135,13 +152,30 @@ def main():
                     
                     # Confidence Distribution
                     if 'confidence' in df.columns:
-                        st.markdown("### 🎯 Confidence Distribution")
+                        st.markdown("### 🎯 Confidence Breakdown")
+                        
+                        df['Confidence Level'] = pd.cut(df['confidence'], bins=[0, 50, 80, 100], labels=['Low', 'Medium', 'High'])
+                        fig_tree = px.treemap(
+                            df, 
+                            path=['sentiment_result', 'Confidence Level'], 
+                            title="Treemap of Sentiment by Confidence",
+                            color='sentiment_result',
+                            color_discrete_map={
+                                'Positif': '#10b981',
+                                'Netral': '#64748b',
+                                'Negatif': '#ef4444',
+                                '(?)': '#ffffff'
+                            }
+                        )
+                        fig_tree.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+                        st.plotly_chart(fig_tree, width="stretch")
+                        
+                        st.markdown("### 📊 Confidence Score Distribution")
                         fig_hist = px.histogram(
                             df, 
                             x="confidence", 
                             color="sentiment_result",
                             nbins=20,
-                            title="Confidence Score Distribution",
                             color_discrete_map={
                                 'Positif': '#10b981',
                                 'Netral': '#64748b',
@@ -169,7 +203,7 @@ def main():
         st.markdown("### 💬 Single Review Sentiment Prediction & Reasoning")
         st.markdown("Test individual JKN Mobile user feedback directly. When using Gemini, you will also receive an AI-generated reasoning explaining why the review received its classification.")
         
-        if True:
+        with st.container(border=True):
             single_text = st.text_area("Input Review Text", height=150, placeholder="Contoh: Aplikasi JKN Mobile sangat membantu untuk daftar antrean faskes 1, sukses selalu!")
             single_model_choice = st.selectbox("Select Model for Single Text", ["Naive Bayes", "IndoBERT", "Gemini 2.5 Flash"], key="single_model_choice")
             
@@ -179,9 +213,7 @@ def main():
                 
             single_run_button = st.button("🚀 Analyze Single Review")
             
-            st.markdown("---")
-            
-        if True:
+        with st.container(border=True):
             st.markdown("### 🏷️ Prediction Result")
             if single_run_button:
                 if not single_text.strip():
@@ -189,26 +221,34 @@ def main():
                 elif single_model_choice == "Gemini 2.5 Flash" and not single_api_key:
                     st.warning("Please enter your Gemini API Key.")
                 else:
-                    with st.spinner(f"Analyzing with {single_model_choice}..."):
+                    with st.status(f"Analyzing with {single_model_choice}...", expanded=True) as status:
                         start_time = time.time()
                         res_confidence = None
+                        res_all_probs = None
                         if single_model_choice == "Naive Bayes":
+                            st.write("Predicting...")
                             nb_model, vectorizer = get_nb_model()
-                            preds, confs = predict_naive_bayes([single_text], nb_model, vectorizer)
+                            preds, confs, all_probs = predict_naive_bayes([single_text], nb_model, vectorizer)
                             res_sentiment = preds[0]
                             res_confidence = confs[0]
+                            res_all_probs = all_probs[0]
                             res_reasoning = "Model Naive Bayes mengklasifikasikan sentimen ini berdasarkan probabilitas kata-kata (berbobot TF-IDF) yang muncul dalam ulasan."
                         elif single_model_choice == "IndoBERT":
+                            st.write("Running transformer...")
                             bert_model, tokenizer = get_indobert_model()
-                            preds, confs = predict_indobert([single_text], bert_model, tokenizer)
+                            preds, confs, all_probs = predict_indobert([single_text], bert_model, tokenizer)
                             res_sentiment = preds[0]
                             res_confidence = confs[0]
+                            res_all_probs = all_probs[0]
                             res_reasoning = "Model IndoBERT mengklasifikasikan sentimen ini berdasarkan representasi kontekstual mendalam dari arsitektur transformer pre-trained pada bahasa Indonesia."
                         elif single_model_choice == "Gemini 2.5 Flash":
+                            st.write("Calling Gemini API...")
                             res_sentiment, res_reasoning = predict_gemini_single_with_reasoning(single_text, single_api_key)
                             
                         end_time = time.time()
                         inference_time = end_time - start_time
+                        status.update(label="Analysis Complete!", state="complete", expanded=False)
+                        st.toast(f"Analysis complete in {inference_time:.3f}s", icon="✅")
                             
                         # Display result badge
                         if res_sentiment == "Positif":
@@ -220,15 +260,15 @@ def main():
                         else:
                             st.info(f"**{res_sentiment}**")
                             
+                        st.markdown("#### ⏱️ Latency")
+                        st.info(f"Model inference took {inference_time:.3f} seconds.")
+                        
+                        st.markdown("#### 💡 Reasoning / Alasan")
+                        st.info(res_reasoning)
+                        
                         col_res1, col_res2 = st.columns(2)
+                        
                         with col_res1:
-                            st.markdown("#### ⏱️ Latency")
-                            st.info(f"Model inference took {inference_time:.3f} seconds.")
-                            
-                            st.markdown("#### 💡 Reasoning / Alasan")
-                            st.info(res_reasoning)
-                            
-                        with col_res2:
                             if res_confidence is not None:
                                 fig_gauge = go.Figure(go.Indicator(
                                     mode = "gauge+number",
@@ -246,7 +286,36 @@ def main():
                                     }
                                 ))
                                 fig_gauge.update_layout(height=250, margin=dict(l=10, r=10, t=40, b=10), paper_bgcolor='rgba(0,0,0,0)', font_color='white')
-                                st.plotly_chart(fig_gauge, use_container_width=True)
+                                st.plotly_chart(fig_gauge, width="stretch")
+                                
+                        with col_res2:
+                            if res_all_probs is not None:
+                                categories = list(res_all_probs.keys())
+                                values = list(res_all_probs.values())
+                                
+                                # Close the radar chart loop
+                                categories.append(categories[0])
+                                values.append(values[0])
+                                
+                                fig_radar = go.Figure()
+                                fig_radar.add_trace(go.Scatterpolar(
+                                      r=values,
+                                      theta=categories,
+                                      fill='toself',
+                                      name='Probability',
+                                      line_color='#8b5cf6',
+                                      fillcolor='rgba(139, 92, 246, 0.4)'
+                                ))
+                                fig_radar.update_layout(
+                                    title=dict(text="Probability Distribution", x=0.5, xanchor='center', font=dict(size=16)),
+                                    polar=dict(radialaxis=dict(visible=True, range=[0, 100], gridcolor='rgba(255,255,255,0.1)')),
+                                    showlegend=False,
+                                    height=250,
+                                    margin=dict(l=10, r=10, t=40, b=10),
+                                    paper_bgcolor='rgba(0,0,0,0)',
+                                    font_color='white'
+                                )
+                                st.plotly_chart(fig_radar, width="stretch")
             else:
                 st.info("Enter review text on the left and click 'Analyze Single Review' to view results and reasoning.")
 
